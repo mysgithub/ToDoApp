@@ -83,7 +83,6 @@ public class MainActivity extends AppCompatActivity {
         File file = new File(filesDir, "todo.txt");
         try{
             FileUtils.writeLines(file, todoItems);
-
         }catch(IOException ex){
             ex.printStackTrace();
         }
@@ -120,6 +119,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if(resultCode == RESULT_OK && requestCode == REQUEST_CODE){
+            // get response data
             int position = data.getIntExtra("position", 0);
             String editedText = data.getStringExtra("editToDoText");
             // display it on screen

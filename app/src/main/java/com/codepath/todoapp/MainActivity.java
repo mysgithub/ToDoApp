@@ -1,92 +1,92 @@
 package com.codepath.todoapp;
 
-import android.content.Intent;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v4.app.FragmentManager;
+import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.Toast;
 
-import org.apache.commons.io.FileUtils;
+import com.codepath.todoapp.adapter.TodoItemAdapter;
+import com.codepath.todoapp.db.TodoItemDatabaseHelper;
+import com.codepath.todoapp.db.model.Todos;
+import com.codepath.todoapp.dialog.EditItemDialog;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements EditItemDialog.OnItemUpdateListener {
 
-    ArrayList<String> todoItems;
-    ArrayAdapter<String> todoAdapter;
+    ArrayList<Todos> todosArrayList;
+    TodoItemAdapter todoItemAdapter;
     ListView lvItems;
     EditText etEditText;
+    TodoItemDatabaseHelper dbHelper;
 
-    private final int REQUEST_CODE = 10;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        todoItems = new ArrayList<String>();
+        // GetInstance of database helper
+        dbHelper = TodoItemDatabaseHelper.getInstance(this);
+        // Get the place to display list
+        lvItems = (ListView) findViewById(R.id.lvItems);
+        // Text field
+        etEditText = (EditText) findViewById(R.id.etEditText);
+        // Display ToDoList
         populateTodoItems();
 
-        lvItems = (ListView) findViewById(R.id.lvItems);
-        lvItems.setAdapter(todoAdapter);
 
-        //Text field
-        etEditText = (EditText) findViewById(R.id.etEditText);
-
-        lvItems.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
-            @Override
-            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
-                todoItems.remove(position);
-                todoAdapter.notifyDataSetChanged();
-                writeItems();
-                return true;
+        // Delete Listener
+        lvItems.setOnItemLongClickListener(
+            new AdapterView.OnItemLongClickListener() {
+                @Override
+                public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                    // remove from database
+                    dbHelper.deleteTodo(todosArrayList.get(position));
+                    // remove from list
+                    todosArrayList.remove(position);
+                    // update adapter
+                    todoItemAdapter.notifyDataSetChanged();
+                    // Display some message
+                    Toast.makeText(MainActivity.this, getString(R.string.item_deleted_success), Toast.LENGTH_SHORT).show();
+                    return true;
+                }
             }
-        });
+        );
 
-        lvItems.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                Intent intent = new Intent(MainActivity.this, EditItemActivity.class);
-                intent.putExtra("position", position);
-                intent.putExtra("editToDoText", todoItems.get(position));
-                startActivityForResult(intent, REQUEST_CODE);
-            }
-        });
+        // Edit Listener
+        lvItems.setOnItemClickListener(
+                new AdapterView.OnItemClickListener() {
+                    @Override
+                    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                        showEditDialog(position);
+                    }
+                }
+        );
 
 
     }
 
     public void populateTodoItems(){
-        readItems();
-        todoAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, todoItems);
+        // Load from database
+        todosArrayList = dbHelper.getAllTodos();
+        // sort by date
+        sortByDate(todosArrayList);
+        // Assign to adapter
+        todoItemAdapter = new TodoItemAdapter(this, todosArrayList);
+        // Set Adapter
+        lvItems.setAdapter(todoItemAdapter);
     }
 
-    private void readItems(){
-        File filesDir = getFilesDir();
-        File file = new File(filesDir, "todo.txt");
-        try{
-            todoItems = new ArrayList<String>(FileUtils.readLines(file));
-        }catch (IOException ex){
-            ex.printStackTrace();
-        }
-    }
-
-    private void writeItems(){
-        File filesDir = getFilesDir();
-        File file = new File(filesDir, "todo.txt");
-        try{
-            FileUtils.writeLines(file, todoItems);
-        }catch(IOException ex){
-            ex.printStackTrace();
-        }
-    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -111,24 +111,71 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onAddItem(View view) {
-        todoAdapter.add(etEditText.getText().toString());
-        etEditText.setText("");
-        writeItems();
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if(resultCode == RESULT_OK && requestCode == REQUEST_CODE){
-            // get response data
-            int position = data.getIntExtra("position", 0);
-            String editedText = data.getStringExtra("editToDoText");
-            // display it on screen
-            todoItems.set(position, editedText);
-            todoAdapter.notifyDataSetChanged();
-            // save to file
-            writeItems();
+        if(!etEditText.getText().toString().isEmpty()) {
+            // Set object
+            Todos aTodo = new Todos();
+            aTodo.setItem(etEditText.getText().toString());
+            // update db
+            dbHelper.insertOrUpdateTodo(aTodo);
+            // update adapter
+            todoItemAdapter.add(aTodo);
+            // clear text box
+            etEditText.setText("");
+            // Display some message
+            Toast.makeText(this, getString(R.string.item_added_success), Toast.LENGTH_SHORT).show();
+        }else{
+            Toast.makeText(this, getString(R.string.error_valid_item), Toast.LENGTH_SHORT).show();
         }
     }
 
 
+    private void showEditDialog(int position) {
+        FragmentManager fragmentManager = getSupportFragmentManager();
+
+        EditItemDialog editItemDialog = EditItemDialog.newInstance(
+                position,
+                todosArrayList.get(position).getItem(),
+                todosArrayList.get(position).getDueDate());
+
+        editItemDialog.show(fragmentManager, "fragment_edit_item");
+
+    }
+
+    @Override
+    public void onItemUpdate(int position, String editToDoText, Long dueDate) {
+        // set object
+        Todos aTodo = todosArrayList.get(position);
+        aTodo.setItem(editToDoText);
+        if(dueDate != null){
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTimeInMillis(dueDate);
+            aTodo.setDueDate(calendar.getTime());
+        }
+        // update database
+        dbHelper.insertOrUpdateTodo(aTodo);
+        // display it on screen
+        todosArrayList.set(position, aTodo);
+        // sort by date
+        sortByDate(todosArrayList);
+        // update adapter
+        todoItemAdapter.notifyDataSetChanged();
+        // Display some message
+        Toast.makeText(this, getString(R.string.item_updated_success), Toast.LENGTH_SHORT).show();
+    }
+
+    private void sortByDate(ArrayList<Todos> todosArrayList){
+        Collections.sort(todosArrayList, new Comparator<Todos>() {
+            @Override
+            public int compare(Todos lhs, Todos rhs) {
+                if(lhs.getDueDate() != null && rhs.getDueDate() != null){
+                    if (lhs.getDueDate().getTime() > rhs.getDueDate().getTime()) {
+                        return 1;
+                    } else if (lhs.getDueDate().getTime() < rhs.getDueDate().getTime()) {
+                        return -1;
+                    }
+                }
+                return 0;
+            }
+        });
+    }
 }

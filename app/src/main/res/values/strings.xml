@@ -1,11 +1,13 @@
 <resources>
     <string name="app_name">ToDoApp</string>
 
-    <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
     <string name="add">Add</string>
     <string name="add_item">Add a new item</string>
     <string name="title_activity_edit_item">Edit Item</string>
-    <string name="edit_text_label">Edit Item Below:</string>
     <string name="save">Save</string>
+    <string name="item_added_success">ToDo added successfully!</string>
+    <string name="item_deleted_success">ToDo deleted successfully!</string>
+    <string name="item_updated_success">ToDo updated successfully!</string>
+    <string name="error_valid_item">Please enter valid item!</string>
 </resources>
